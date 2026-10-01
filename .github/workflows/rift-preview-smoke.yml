@@ -9,13 +9,17 @@ permissions:
 jobs:
   playable:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: npm install --no-save --no-audit --no-fund playwright@1.55.1
+      - name: Use the Ubuntu archive for browser dependencies
+        run: |
+          printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
+          printf '%s\n' 'https://security.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-security-mirrors.txt > /dev/null
       - run: npx playwright install --with-deps chromium webkit
       - name: Open actual hosted game and exercise controls
         run: |
