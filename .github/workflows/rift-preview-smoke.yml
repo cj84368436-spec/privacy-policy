@@ -29,9 +29,9 @@ jobs:
             try {
               const page=await browser.newPage({viewport:{width:390,height:844},hasTouch:true,deviceScaleFactor:2});
               const errors=[];page.on("pageerror",e=>errors.push(e.message));
-              let current=false;for(let attempt=0;attempt<40;attempt++){await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?v="+process.env.GITHUB_SHA,{waitUntil:"networkidle"});current=await page.evaluate(()=>typeof Art!=="undefined"&&Art.version==="1.3.0");if(current)break;await page.waitForTimeout(3000);}assert.ok(current,"New preview did not finish publishing: "+JSON.stringify({errors,state:await page.evaluate(()=>({version:typeof Art!=="undefined"?Art.version:null,title:document.title,url:location.href,text:document.body.innerText.slice(0,300)}))}));
+              let current=false;for(let attempt=0;attempt<40;attempt++){await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?v="+process.env.GITHUB_SHA,{waitUntil:"networkidle"});current=await page.evaluate(()=>typeof Art!=="undefined"&&Art.version==="1.4.0");if(current)break;await page.waitForTimeout(3000);}assert.ok(current,"New preview did not finish publishing: "+JSON.stringify({errors,state:await page.evaluate(()=>({version:typeof Art!=="undefined"?Art.version:null,title:document.title,url:location.href,text:document.body.innerText.slice(0,300)}))}));
               await page.locator("#home:not(.hidden)").waitFor({timeout:20000});
-              assert.equal(await page.evaluate(()=>Art.ready&&Art.images.size===21),true,"Painted textures did not load");
+              assert.equal(await page.evaluate(()=>Art.ready&&Art.images.size===29),true,"Painted textures did not load");
               assert.equal(await page.evaluate(()=>audio.buffers.size),15,"Recorded audio did not decode");
               await page.screenshot({path:"preview-evidence/"+name+"-home.png"});
               await page.locator('[data-hero="ranger"]').click();
@@ -50,7 +50,11 @@ jobs:
               await page.locator("#resume").click();
               await page.waitForFunction(previous=>game.time>previous,t,{timeout:5000});
               assert.deepEqual(errors,[],"Uncaught errors in hosted preview");
-              console.log(name+": actual hosted game loads, starts, moves, uses abilities, pauses and resumes");
+              const records=await page.evaluate(()=>localStorage.getItem("riftkeepers:play-preview:v1"));
+              await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?v="+process.env.GITHUB_SHA+"&practice=blade",{waitUntil:"networkidle"});await page.locator("#home:not(.hidden)").waitFor();await page.locator("#start").click();await page.waitForFunction(()=>game?.practice===true);
+              await page.evaluate(()=>{for(let i=0;i<1100&&!game.result;i++)game.step(1/60);});await page.locator("#dialog-title").filter({hasText:"검술 연습 완료"}).waitFor();
+              assert.equal(await page.evaluate(()=>localStorage.getItem("riftkeepers:play-preview:v1")),records,"Practice altered permanent records");assert.deepEqual(errors,[],"Uncaught practice errors");
+              console.log(name+": hosted 1.4 loads all frames and audio, normal controls work, sword practice leaves records unchanged");
             } finally {await browser.close();}
           }
           JS
