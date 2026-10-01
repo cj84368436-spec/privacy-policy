@@ -29,8 +29,9 @@ jobs:
             try {
               const page=await browser.newPage({viewport:{width:390,height:844},hasTouch:true,deviceScaleFactor:2});
               const errors=[];page.on("pageerror",e=>errors.push(e.message));
-              await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/",{waitUntil:"networkidle"});
+              let current=false;for(let attempt=0;attempt<20;attempt++){await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?v="+process.env.GITHUB_SHA,{waitUntil:"networkidle"});current=await page.evaluate(()=>typeof Art!=="undefined"&&Art.version==="1.2.0");if(current)break;await page.waitForTimeout(3000);}assert.ok(current,"New preview did not finish publishing");
               await page.locator("#home:not(.hidden)").waitFor({timeout:20000});
+              assert.equal(await page.evaluate(()=>Art.ready&&Art.images.size===13),true,"Painted textures did not load");
               await page.screenshot({path:"preview-evidence/"+name+"-home.png"});
               await page.locator('[data-hero="ranger"]').click();
               await page.locator("#start").click();
