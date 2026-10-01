@@ -22,7 +22,6 @@ jobs:
           node --input-type=module <<'JS'
           import fs from "node:fs";
           import assert from "node:assert/strict";
-          import crypto from "node:crypto";
           import {chromium,webkit} from "playwright";
           fs.mkdirSync("preview-evidence",{recursive:true});
           const mp4URL="https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/video/knight-15s.mp4?v="+process.env.GITHUB_SHA;
@@ -31,7 +30,7 @@ jobs:
           assert.equal(mediaResponse.status,200);assert.ok(mediaBytes.equals(localBytes),"Hosted MP4 differs from release");
           const failures=[];
           for (const [name,engine] of [["chromium",chromium],["webkit",webkit]]) {
-            const browser=await engine.launch();
+            const browser=await engine.launch(name==="chromium"?{channel:"chrome"}:{});
             try {
               const page=await browser.newPage({viewport:{width:390,height:844},hasTouch:true,deviceScaleFactor:2});
               const errors=[];page.on("pageerror",e=>errors.push(e.message));
