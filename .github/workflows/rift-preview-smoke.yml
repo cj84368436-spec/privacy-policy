@@ -54,7 +54,10 @@ jobs:
               await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?v="+process.env.GITHUB_SHA+"&practice=blade",{waitUntil:"networkidle"});await page.locator("#home:not(.hidden)").waitFor();await page.locator("#start").click();await page.waitForFunction(()=>game?.practice===true);
               await page.evaluate(()=>{for(let i=0;i<1100&&!game.result;i++)game.step(1/60);});await page.locator("#dialog-title").filter({hasText:"검술 연습 완료"}).waitFor();
               assert.equal(await page.evaluate(()=>localStorage.getItem("riftkeepers:play-preview:v1")),records,"Practice altered permanent records");assert.deepEqual(errors,[],"Uncaught practice errors");
-              console.log(name+": hosted 1.4 loads all frames and audio, normal controls work, sword practice leaves records unchanged");
+              await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/sword.html?v="+process.env.GITHUB_SHA,{waitUntil:"networkidle"});await page.locator("#reel").waitFor();
+              await page.waitForFunction(()=>{const v=document.getElementById("reel");if(v.error)throw new Error("Video error "+v.error.code);return v.readyState>=1;},{},{timeout:25000});
+              assert.ok((await page.evaluate(()=>document.getElementById("reel").duration))>14.8,"Gameplay reel has no duration");await page.locator("#play").click();await page.waitForFunction(()=>document.getElementById("reel").currentTime>.1,{},{timeout:10000});
+              console.log(name+": hosted 1.4 loads frames and audio, normal controls work, practice keeps records unchanged, and H264/AAC gameplay video plays");
             } finally {await browser.close();}
           }
           JS
