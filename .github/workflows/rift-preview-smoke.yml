@@ -36,30 +36,45 @@ jobs:
           for (const [name,engine] of [["chromium",chromium],["webkit",webkit]]) {
             const browser=await engine.launch(name==="chromium"?{channel:"chrome"}:{});
             try {
-              const page=await browser.newPage({viewport:{width:390,height:844},hasTouch:true,deviceScaleFactor:2});
+              const page=await browser.newPage({viewport:{width:390,height:844},hasTouch:true,isMobile:true,deviceScaleFactor:2});
               const errors=[];page.on("pageerror",e=>errors.push(e.message));
               page.on("requestfailed",r=>{if(r.url().includes("mp4"))console.log(name+" video request failed",r.url(),r.failure());});
               page.on("response",r=>{if(r.url().includes("mp4"))console.log(name+" video response",r.status(),r.url(),JSON.stringify(r.headers()));});
-              let current=false;for(let attempt=0;attempt<40;attempt++){await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?v="+process.env.GITHUB_SHA,{waitUntil:"networkidle"});current=await page.evaluate(()=>typeof Art!=="undefined"&&Art.version==="1.5.0");if(current)break;await page.waitForTimeout(3000);}assert.ok(current,"New preview did not finish publishing: "+JSON.stringify({errors,state:await page.evaluate(()=>({version:typeof Art!=="undefined"?Art.version:null,title:document.title,url:location.href,text:document.body.innerText.slice(0,300)}))}));
+              let current=false;for(let attempt=0;attempt<40;attempt++){await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?v="+process.env.GITHUB_SHA,{waitUntil:"networkidle"});current=await page.evaluate(()=>typeof Art!=="undefined"&&Art.version==="1.5.1");if(current)break;await page.waitForTimeout(3000);}assert.ok(current,"New preview did not finish publishing: "+JSON.stringify({errors,state:await page.evaluate(()=>({version:typeof Art!=="undefined"?Art.version:null,title:document.title,url:location.href,text:document.body.innerText.slice(0,300)}))}));
               await page.locator("#home:not(.hidden)").waitFor({timeout:20000});
               assert.equal(await page.evaluate(()=>Art.ready&&Art.images.size===53),true,"Painted textures did not load");
               assert.equal(await page.evaluate(()=>audio.buffers.size),19,"Recorded audio did not decode");
               await page.screenshot({path:"preview-evidence/"+name+"-home.png"});
               await page.locator('[data-hero="ranger"]').click();
-              await page.locator("#start").click();
+              await page.locator("#start").tap();
               await page.locator("#hud:not(.hidden)").waitFor();
               await page.waitForFunction(()=>document.getElementById("time").textContent!=="00:00",{timeout:10000});
+              // A visible webview can emit blur while the user touches the canvas.
+              await page.evaluate(()=>document.getElementById("world").addEventListener("pointerdown",()=>window.dispatchEvent(new Event("blur")),{once:true}));
+              await page.touchscreen.tap(160,430);
+              assert.equal(await page.evaluate(()=>document.hidden),false);
+              assert.equal(await page.evaluate(()=>game.phase),"playing","Touch focus change paused the visible game");
+              assert.equal(await page.locator("#overlay").isVisible(),false);
               const before=await page.evaluate(()=>game.player.x);
               await page.mouse.move(130,430);await page.mouse.down();await page.mouse.move(220,430,{steps:4});
+              await page.evaluate(()=>window.dispatchEvent(new Event("blur")));
               await page.waitForTimeout(350);await page.mouse.up();
               assert.ok((await page.evaluate(()=>game.player.x))>before+20,"Dragging did not move the hero");
               await page.locator("#dash").click();await page.locator("#ultimate").click();
-              await page.locator("#pause").click();await page.locator("#resume").waitFor();
+              await page.locator("#pause").tap();await page.locator("#resume").waitFor();
               const t=await page.evaluate(()=>game.time);await page.waitForTimeout(200);
               assert.equal(await page.evaluate(()=>game.time),t,"Pause did not freeze combat");
               await page.screenshot({path:"preview-evidence/"+name+"-game.png"});
               await page.locator("#resume").click();
               await page.waitForFunction(previous=>game.time>previous,t,{timeout:5000});
+              await page.evaluate(()=>{Object.defineProperty(document,"hidden",{configurable:true,get:()=>true});document.dispatchEvent(new Event("visibilitychange"));});
+              await page.locator("#resume").waitFor();
+              const hiddenTime=await page.evaluate(()=>game.time);await page.waitForTimeout(200);
+              assert.equal(await page.evaluate(()=>game.time),hiddenTime,"Hidden document did not pause combat");
+              assert.equal(await page.evaluate(()=>audio.context?.state),"suspended","Background did not silence audio");
+              await page.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event("visibilitychange"));});
+              assert.equal(await page.evaluate(()=>game.phase),"paused","Foreground automatically resumed combat");
+              await page.locator("#resume").tap();
               assert.deepEqual(errors,[],"Uncaught errors in hosted preview");
               const records=await page.evaluate(()=>localStorage.getItem("riftkeepers:play-preview:v1"));
               for(const [key,hero,title]of [["blade","knight","검술 연습"],["arrow","ranger","궁술 연습"],["bolt","mage","마법 연습"]]){
@@ -72,7 +87,7 @@ jobs:
               await page.evaluate(()=>{window.videoEvents=[];const v=document.getElementById("reel");for(const type of ["loadstart","loadedmetadata","error","stalled","suspend","playing"])v.addEventListener(type,()=>window.videoEvents.push(type));const play=v.play.bind(v);v.play=()=>play().catch(e=>{window.videoPlayError={name:e.name,message:e.message};throw e;});});await page.locator("#play").click();
               await page.waitForFunction(()=>{const v=document.getElementById("reel");if(v.error)throw new Error("Video error "+v.error.code);return v.readyState>=1;},{},{timeout:25000});
               assert.ok((await page.evaluate(()=>document.getElementById("reel").duration))>14.8,"Gameplay reel has no duration");await page.waitForFunction(()=>document.getElementById("reel").currentTime>.1,{},{timeout:10000});
-              console.log(name+": hosted 1.5 loads frames and audio, normal controls work, all three practices keep records unchanged, and H264/AAC gameplay video plays");
+              console.log(name+": hosted 1.5.1 loads frames and audio, normal controls work, all three practices keep records unchanged, and H264/AAC gameplay video plays");
             } catch(error) {
               const pages=browser.contexts().flatMap(c=>c.pages());const page=pages[pages.length-1];if(page){console.log(name+" video failure",await page.evaluate(()=>{const v=document.getElementById("reel");return v?{src:v.currentSrc,source:v.querySelector("source")?.src,ready:v.readyState,network:v.networkState,error:v.error?.code,playError:window.videoPlayError,events:window.videoEvents}:{};}));await page.screenshot({path:"preview-evidence/"+name+"-failure.png"});}
               console.log(name+" failed",error.message);failures.push(name+": "+error.message);
