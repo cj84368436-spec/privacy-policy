@@ -26,6 +26,7 @@ jobs:
           node --input-type=module <<'JS'
           import fs from "node:fs";
           import assert from "node:assert/strict";
+          import crypto from "node:crypto";
           import {chromium,webkit} from "playwright";
           fs.mkdirSync("preview-evidence",{recursive:true});
           const mp4URL="https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/video/knight-15s.mp4?v="+process.env.GITHUB_SHA;
@@ -43,6 +44,8 @@ jobs:
            return {start:(x,y,id=7)=>send("touchstart",id,x,y),move:(x,y,id=7)=>send("touchmove",id,x,y),end:(id=7)=>send("touchend",id),cancel:(id=7)=>send("touchcancel",id)};
           }
           
+          const soundManifest=JSON.parse(fs.readFileSync("play/rift-keepers/audio/manifest.json","utf8"));assert.equal(soundManifest.version,"2.1.0");
+          for(const name of ["blade-hit-a.mp3","swish-a.mp3","thunder.mp3"]){const b=fs.readFileSync("play/rift-keepers/audio/"+name),entry=soundManifest.files.find(x=>x.name===name);assert.equal(crypto.createHash("sha256").update(b).digest("hex"),entry.sha256);}
           const failures=[];
           for (const [name,engine] of [["chromium",chromium],["webkit",webkit]]) {
             const browser=await engine.launch(name==="chromium"?{channel:"chrome"}:{});
@@ -51,11 +54,21 @@ jobs:
               const errors=[];page.on("pageerror",e=>errors.push(e.message));
               page.on("requestfailed",r=>{if(r.url().includes("mp4"))console.log(name+" video request failed",r.url(),r.failure());});
               page.on("response",r=>{if(r.url().includes("mp4"))console.log(name+" video response",r.status(),r.url(),JSON.stringify(r.headers()));});
-              let current=false;for(let attempt=0;attempt<40;attempt++){await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?v="+process.env.GITHUB_SHA,{waitUntil:"networkidle"});current=await page.evaluate(()=>typeof Art!=="undefined"&&Art.version==="2.0.0"&&document.body.dataset.build==="2.0.0-courtyard");if(current)break;await page.waitForTimeout(3000);}assert.ok(current,"New preview did not finish publishing: "+JSON.stringify({errors,state:await page.evaluate(()=>({version:typeof Art!=="undefined"?Art.version:null,title:document.title,url:location.href,text:document.body.innerText.slice(0,300)}))}));
+              let current=false;for(let attempt=0;attempt<40;attempt++){await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?v="+process.env.GITHUB_SHA,{waitUntil:"networkidle"});current=await page.evaluate(()=>typeof Art!=="undefined"&&Art.version==="2.1.0"&&document.body.dataset.build==="2.1.0-class-skills");if(current)break;await page.waitForTimeout(3000);}assert.ok(current,"New preview did not finish publishing: "+JSON.stringify({errors,state:await page.evaluate(()=>({version:typeof Art!=="undefined"?Art.version:null,title:document.title,url:location.href,text:document.body.innerText.slice(0,300)}))}));
               await page.locator("#home:not(.hidden)").waitFor({timeout:20000});
               assert.equal(await page.evaluate(()=>Art.ready&&Art.images.size===54),true,"Painted textures did not load");
               assert.equal(await page.evaluate(()=>audio.buffers.size),19,"Recorded audio did not decode");
               await page.screenshot({path:"preview-evidence/"+name+"-home.png"});
+              // Class-exclusive growth, codex and actual skill release in the published build.
+              for(const [hero,keys]of Object.entries({knight:["blade","whirlwind","cleave","slam","rend","orbit"],ranger:["arrow","multishot","piercing","poison","trap","volley"],mage:["bolt","fireball","lightning","frost","meteor","nova"]})){
+                await page.locator('[data-hero="'+hero+'"]').click();await page.locator("#skill-book").click();assert.equal(await page.locator(".skill-codex article").count(),6);await page.locator("#skill-book-close").click();await page.locator("#start").tap();
+                await page.evaluate(()=>game.addXP(8));await page.locator(".upgrade").first().waitFor();assert.equal(await page.locator(".upgrade").count(),4);const offered=await page.evaluate(()=>game.choices);assert.ok(offered.every(k=>keys.includes(k)||["power","haste","boots","heart","magnet","crit","leech","focus"].includes(k)));
+                await page.locator(".upgrade").first().click();
+                for(const key of keys){await page.evaluate(key=>{game.phase="playing";game.enemies=[];game.weapons={};game.fx=[];game.bullets=[];game.skillFields=[];game.skillTasks=[];game.bladeSwing=null;game.rangedAttacks={};game.spawnCd=game.nextElite=999;game.player.inv=999;const e=game.spawn("brute");Object.assign(e,{x:game.player.x+85,y:game.player.y,hp:5000,maxHp:5000,speed:0,shoot:999});game.attack(key,3);for(let i=0;i<45;i++)game.step(1/60);game.phase="paused";},key);await page.waitForTimeout(35);}
+                await page.evaluate(()=>game.finish(false));await page.locator("#result-home").click();
+              }
+              assert.ok(await page.evaluate(()=>audio.buffers.get("thunder").duration>3),"Recorded thunder tail missing");
+
               // Exercise the new objective through the actual hosted implementation.
               await page.locator("#start").tap();
               await page.evaluate(()=>{game.enemies=[];game.spawnCd=game.nextElite=999;game.weapons={};game.time=34.99;game.step(1/60);});
@@ -101,7 +114,7 @@ jobs:
               await page.locator("#resume").tap();
               assert.deepEqual(errors,[],"Uncaught errors in hosted preview");
               const records=await page.evaluate(()=>localStorage.getItem("riftkeepers:play-preview:v1"));
-              for(const [key,hero,title]of [["blade","knight","검술 연습"],["arrow","ranger","궁술 연습"],["bolt","mage","마법 연습"]]){
+              for(const [key,hero,title]of [["blade","knight","검술 연습"],["arrow","ranger","궁술 연습"],["bolt","mage","마법 연습"],["lightning","mage","번개 사슬 연습"]]){
                 await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?v="+process.env.GITHUB_SHA+"&practice="+key,{waitUntil:"networkidle"});await page.locator("#home:not(.hidden)").waitFor();assert.equal(await page.locator('[data-hero="'+hero+'"]').getAttribute("aria-pressed"),"true");await page.locator("#start").click();await page.waitForFunction(()=>game?.practice===true);assert.equal(await page.evaluate(()=>game.hero.id),hero);
                 await page.evaluate(()=>{game.player.inv=999;game.enemies=[];game.spawnCd=game.nextElite=999;});
                 await page.keyboard.down("ArrowLeft");
@@ -134,7 +147,7 @@ jobs:
               await page.evaluate(()=>{window.videoEvents=[];const v=document.getElementById("reel");for(const type of ["loadstart","loadedmetadata","error","stalled","suspend","playing"])v.addEventListener(type,()=>window.videoEvents.push(type));const play=v.play.bind(v);v.play=()=>play().catch(e=>{window.videoPlayError={name:e.name,message:e.message};throw e;});});await page.locator("#play").click();
               await page.waitForFunction(()=>{const v=document.getElementById("reel");if(v.error)throw new Error("Video error "+v.error.code);return v.readyState>=1;},{},{timeout:25000});
               assert.ok((await page.evaluate(()=>document.getElementById("reel").duration))>14.8,"Gameplay reel has no duration");await page.waitForFunction(()=>document.getElementById("reel").currentTime>.1,{},{timeout:10000});
-              console.log(name+": hosted 2.0 courtyard, growth and distinct ultimates work, mobile steering and all three practices keep records unchanged, and H264/AAC gameplay video plays");
+              console.log(name+": hosted 2.1 exclusive skills, four choices and remixed audio work, mobile steering and all four practices keep records unchanged, and H264/AAC gameplay video plays");
             } catch(error) {
               const pages=browser.contexts().flatMap(c=>c.pages());const page=pages[pages.length-1];if(page){console.log(name+" video failure",await page.evaluate(()=>{const v=document.getElementById("reel");return v?{src:v.currentSrc,source:v.querySelector("source")?.src,ready:v.readyState,network:v.networkState,error:v.error?.code,playError:window.videoPlayError,events:window.videoEvents}:{};}));await page.screenshot({path:"preview-evidence/"+name+"-failure.png"});}
               console.log(name+" failed",error.message);failures.push(name+": "+error.message);
