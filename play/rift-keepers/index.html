@@ -38,7 +38,7 @@
 
 /* Production skill illustrations: one cached atlas, full-size tiles. */
 .rune-icon.painted-skill{display:block;position:relative;overflow:hidden;isolation:isolate;border-radius:5px;background:#071424;flex-shrink:0}
-.painted-skill img{position:absolute!important;display:block;width:600%!important;height:500%!important;max-width:none!important;object-fit:fill;pointer-events:none;user-select:none}
+.painted-skill img{position:absolute!important;display:block;width:var(--atlas-w,600%)!important;height:var(--atlas-h,500%)!important;max-width:none!important;object-fit:fill;pointer-events:none;user-select:none}
 .upgrade-list{gap:9px}
 .upgrade{min-height:112px;padding:12px 10px;gap:12px;border-color:#8e78564f;background:linear-gradient(125deg,#2b3c504f,#101f32)}
 .upgrade .glyph{width:66px;height:66px;border:0;border-radius:8px;box-shadow:0 3px 14px #0006;overflow:hidden}
@@ -55,7 +55,25 @@
 .ability.ultimate.ready{box-shadow:0 0 22px #9a6a433b,inset 0 1px #eddcb055}
 @media(max-height:700px){.upgrade{min-height:104px;padding:10px}.upgrade .glyph,.upgrade .glyph .rune-icon.painted-skill{width:58px;height:58px}.skill-behavior{font-size:10px}.upgrade strong{font-size:14px}.upgrade-list{gap:8px}}
 @media(prefers-reduced-motion:reduce){.upgrade,.ability{transition:none}}
-</style></head><body data-build="3.0.0-production"><div id="app">
+
+@media(max-height:700px){
+ #dialog:has(.upgrade-list){padding:14px 12px}
+ #dialog:has(.upgrade-list) h2{font-size:21px;margin:5px 0 7px}
+ #dialog:has(.upgrade-list)>p{font-size:11px;margin-bottom:8px}
+ .upgrade-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .upgrade{position:relative;min-height:172px;flex-direction:column;align-items:flex-start;gap:7px;padding:10px}
+ .upgrade .glyph,.upgrade .glyph .rune-icon.painted-skill{width:54px;height:54px}
+ .upgrade-copy{width:100%}
+ .upgrade strong{font-size:13px}
+ .upgrade small{font-size:10px;margin-top:3px;line-height:1.35}
+ .skill-behavior{font-size:9px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+ .upgrade em{font-size:8px;line-height:1.3;margin-top:3px}
+ .upgrade .lv{position:absolute;right:8px;top:9px;font-size:8px}
+ .choice-tag{font-size:8px;margin-bottom:3px}
+ .build-summary{font-size:9px;margin-top:8px;padding:9px}
+ .level-dots{margin-top:4px}
+}
+</style></head><body data-build="3.0.0-production" data-preview-revision="cards-r2"><div id="app">
 <canvas id="world" aria-label="균열 전장"></canvas>
 <div id="boot" class="screen"><div class="boot-rune">✦</div><h1>균열의 수호자</h1><p id="boot-message">모험을 준비하고 있어요</p><button id="retry" class="primary" hidden>다시 연결하기</button></div>
 <section id="home" class="screen hidden"><header class="home-top"><span class="wordmark">RIFT KEEPERS</span><button id="settings" class="icon-button" aria-label="설정">⚙</button></header>
@@ -417,8 +435,9 @@ c.save();c.translate(x,y);c.scale(face,1);c.rotate(tilt);const foot=height*.26;c
 if(flash>0){c.globalAlpha*=Math.min(.42,flash);c.drawImage(sprite.flash,-width/2,foot-height,width,height);}c.restore();return true;
 }
 
+const SKILL_ART_ROWS=[[5,210],[226,202],[442,207],[662,205],[884,254]];
 const SKILL_ART_KEYS=["blade","whirlwind","cleave","slam","rend","orbit","arrow","multishot","piercing","poison","trap","volley","bolt","fireball","lightning","frost","meteor","nova","power","haste","boots","heart","magnet","crit","leech","focus","ultimate-knight","ultimate-ranger","ultimate-mage","heal"];
-function drawAtlas(c,name,col,row,x,y,width,height=width,rotation=0,alpha=1){const img=Art.images.get(name);if(!img)return false;const cols=6,rows=name==="skill-atlas"?5:6,sw=img.naturalWidth/cols,sh=img.naturalHeight/rows;c.save();c.translate(x,y);c.rotate(rotation);c.globalAlpha*=alpha;c.drawImage(img,col*sw,row*sh,sw,sh,-width/2,-height/2,width,height);c.restore();return true;}
+function drawAtlas(c,name,col,row,x,y,width,height=width,rotation=0,alpha=1){const img=Art.images.get(name);if(!img)return false;const cols=6,rows=name==="skill-atlas"?5:6,sw=img.naturalWidth/cols,sh=img.naturalHeight/rows;c.save();c.translate(x,y);c.rotate(rotation);c.globalAlpha*=alpha;const pad=name==="combat-atlas"?5:0;c.drawImage(img,col*sw+pad,row*sh+pad,sw-pad*2,sh-pad*2,-width/2,-height/2,width,height);c.restore();return true;}
 
 const paths={
 whirlwind:'<path d="M26 8C18-2 0 7 6 20c4 9 20 6 18-3-1-6-11-7-13-2-2 5 5 8 8 4M24 3l2 5-6 2"/>',
@@ -453,7 +472,7 @@ ultimate:'<path d="m16 2 4 10 10 4-10 4-4 10-4-10-10-4 10-4z"/><path d="m25 3 1 
 settings:'<path d="m13 3 6 0 1 4 4 2 4-1 3 5-3 3v4l2 3-4 4-4-2-3 1-2 4h-6l-1-4-4-2-4 1-2-5 3-3v-4l-2-3 4-4 4 2 3-1z"/><circle cx="16" cy="16" r="5"/>',
 pause:'<path d="M10 7v18M22 7v18"/>'
 };
-function iconMarkup(key){const tile=SKILL_ART_KEYS.indexOf(key);if(tile>=0){const col=tile%6,row=Math.floor(tile/6);return '<span class="rune-icon painted-skill" aria-hidden="true"><img src="'+Art.urls["skill-atlas"]+'" alt="" draggable="false" style="left:-'+col*100+'%;top:-'+row*100+'%"></span>';}return '<svg class="rune-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(paths[key]||paths.heart)+'</svg>';}
+function iconMarkup(key){const tile=SKILL_ART_KEYS.indexOf(key);if(tile>=0){const col=tile%6,row=Math.floor(tile/6),[y,height]=SKILL_ART_ROWS[row],x=col*229+5,width=219;return '<span class="rune-icon painted-skill" aria-hidden="true"><img src="'+Art.urls["skill-atlas"]+'" alt="" draggable="false" style="--atlas-w:'+(1374/width*100)+'%;--atlas-h:'+(1145/height*100)+'%;left:-'+(x/width*100)+'%;top:-'+(y/height*100)+'%"></span>';}return '<svg class="rune-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(paths[key]||paths.heart)+'</svg>';}
 
 const HERO_SCALE=1.65;
 const ENEMY_HEIGHTS={shade:66,bat:54,brute:92,seer:78,boss:185};
@@ -541,8 +560,8 @@ const beam=c.createLinearGradient(-16,0,16,0);beam.addColorStop(0,"#b78532");bea
 if(age>=.28){drawAtlas(c,"combat-atlas",Math.min(5,Math.floor(impact*6)),0,f.x,f.y-10,f.r*2.1,f.r*1.55,-.3,1);if(!this.reduced){c.strokeStyle="#fff0bd";c.lineWidth=3*(1-impact);for(let i=0;i<10;i++){const q=i*TAU/10,dist=35+impact*f.r;c.beginPath();c.moveTo(f.x+Math.cos(q)*dist*.5,f.y+Math.sin(q)*dist*.35);c.lineTo(f.x+Math.cos(q+.06)*dist,f.y+Math.sin(q+.06)*dist*.7);c.stroke();}}}return true;}
 if(f.kind==="meteor-fan"){c.globalAlpha=1;const age=f.max-f.ttl;c.save();c.translate(f.x,f.y);c.rotate(f.angle);const pulse=.5+Math.sin(age*24)*.35;this.glow(0,0,135,"mint",pulse);c.strokeStyle="#e0ffdc";c.lineWidth=2;for(let i=0;i<7;i++){const q=(i-3)*.12,dist=35+Math.min(1,age/.5)*170;c.beginPath();c.moveTo(Math.cos(q)*18,Math.sin(q)*18);c.lineTo(Math.cos(q)*dist,Math.sin(q)*dist);c.stroke();const tx=Math.cos(q)*dist,ty=Math.sin(q)*dist;c.save();c.translate(tx,ty);c.rotate(q);c.fillStyle="#eefbd2";c.beginPath();c.moveTo(11,0);c.lineTo(-7,-4);c.lineTo(-4,0);c.lineTo(-7,4);c.closePath();c.fill();c.restore();}c.restore();
 if(!this.reduced){drawHero(c,g.hero,f.x-24,f.y+12,HERO_SCALE,1,t,false,true,0,{elapsed:.17,tempo:1,angle:f.angle},false);c.globalAlpha=.18;drawHero(c,g.hero,f.x+24,f.y+12,HERO_SCALE,1,t,false,true,0,{elapsed:.17,tempo:1,angle:f.angle},false);}return true;}
-if(f.kind==="frost-crown"){const age=f.max-f.ttl,rise=clampRender((age-.16)/.25);c.globalAlpha=1;const frame=age<.3?Math.min(2,Math.floor(age*8)):Math.min(5,2+Math.floor((age-.3)*4));drawAtlas(c,"combat-atlas",frame,4,f.x,f.y-22,f.r*2.4,f.r*1.9,0,.95);
-if(rise>0){for(let i=0;i<7;i++){const q=i*TAU/7,dist=f.r*.62,xx=f.x+Math.cos(q)*dist,yy=f.y+Math.sin(q)*dist*.6,height=(60+hash(i,f.x)*65)*rise;c.save();c.translate(xx,yy);const grad=c.createLinearGradient(-12,0,12,-height);grad.addColorStop(0,"#367eaa");grad.addColorStop(.55,"#8edbf1");grad.addColorStop(1,"#f2fcff");c.fillStyle=grad;c.beginPath();c.moveTo(0,-height);c.lineTo(13,-height*.4);c.lineTo(9,8);c.lineTo(-10,12);c.lineTo(-15,-height*.3);c.closePath();c.fill();c.strokeStyle="#e5fbff";c.lineWidth=1.3;c.beginPath();c.moveTo(0,-height);c.lineTo(-2,5);c.stroke();c.restore();}}
+if(f.kind==="frost-crown"){const age=f.max-f.ttl,rise=clampRender((age-.16)/.25);c.globalAlpha=1;const frame=age<.3?Math.min(2,Math.floor(age*8)):Math.min(5,2+Math.floor((age-.3)*4));drawAtlas(c,"combat-atlas",frame,4,f.x,f.y-22,f.r*1.95,f.r*1.3,0,.32);
+if(rise>0){for(let i=0;i<7;i++){const q=i*TAU/7,dist=f.r*.62,xx=f.x+Math.cos(q)*dist,yy=f.y+Math.sin(q)*dist*.6,height=(45+hash(i,f.x)*48)*rise;c.save();c.translate(xx,yy);const grad=c.createLinearGradient(-12,0,12,-height);grad.addColorStop(0,"#367eaa");grad.addColorStop(.55,"#8edbf1");grad.addColorStop(1,"#f2fcff");c.fillStyle=grad;c.beginPath();c.moveTo(0,-height);c.lineTo(13,-height*.4);c.lineTo(9,8);c.lineTo(-10,12);c.lineTo(-15,-height*.3);c.closePath();c.fill();c.strokeStyle="#e5fbff";c.lineWidth=1.3;c.beginPath();c.moveTo(0,-height);c.lineTo(-2,5);c.stroke();c.restore();}}
 return true;}
 if(f.kind==="arrow-rain"){c.globalAlpha=Math.min(1,a+.25);const count=this.quality<.8?9:16;for(let i=0;i<count;i++){const q=hash(i,f.x)*TAU,dist=Math.sqrt(hash(i,f.y))*f.r*.9,xx=f.x+Math.cos(q)*dist,yy=f.y+Math.sin(q)*dist,fall=clampRender(u*1.7+hash(i,2)*.25),height=(1-fall)*155;c.strokeStyle="#bdf5c666";c.lineWidth=2;c.beginPath();c.moveTo(xx+height*.15,yy-height-65);c.lineTo(xx,yy-height);c.stroke();this.projectile({x:xx,y:yy-height+20,vx:-.15,vy:1,r:5,key:"arrow",evolved:true,ttl:1});if(fall>.94)this.glow(xx,yy,35,"mint",a*.75);}return true;}
 return false;}
