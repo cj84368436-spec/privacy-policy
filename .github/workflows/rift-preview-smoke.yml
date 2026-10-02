@@ -94,8 +94,9 @@ jobs:
                 await page.keyboard.down("ArrowLeft");
                 const touch=await makeTouchDriver(page,name);
                 for(const [dx,dy]of [[1,0],[-1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]]){
+                  await touch.start(195,440);assert.equal(await page.evaluate(()=>joy.source),"touch");
                   const before=await page.evaluate(()=>({x:game.player.x,y:game.player.y,d:game.player.walkDistance}));
-                  await touch.start(195,440);await touch.move(195+dx*60,440+dy*60);await page.waitForTimeout(150);
+                  await touch.move(195+dx*60,440+dy*60);await page.waitForTimeout(150);
                   const after=await page.evaluate(()=>({x:game.player.x,y:game.player.y,d:game.player.walkDistance}));
                   if(dx)assert.ok((after.x-before.x)*dx>8,hero+" failed touch x direction "+dx+" "+JSON.stringify({before,after,input:await page.evaluate(()=>({source:joy.source,x:joy.x,y:joy.y,keys:[...keys],touchEvents:"TouchEvent" in window}))}));
                   if(dy)assert.ok((after.y-before.y)*dy>8,hero+" failed touch y direction "+dy);
@@ -104,8 +105,9 @@ jobs:
                 }
                 await touch.start(195,440);await touch.move(130,440);await page.waitForTimeout(100);
                 const left=await page.evaluate(()=>game.player.x);
-                await touch.move(290,440);await page.keyboard.down("ArrowLeft");await page.evaluate(()=>window.dispatchEvent(new Event("resize")));await page.waitForTimeout(150);
-                assert.ok((await page.evaluate(()=>game.player.x))>left+8,hero+" lost direction on turn or resize");
+                await touch.move(290,440);await page.keyboard.down("ArrowLeft");await page.evaluate(()=>window.dispatchEvent(new Event("resize")));
+                const right=await page.evaluate(()=>game.player.x);await page.waitForTimeout(150);
+                assert.ok((await page.evaluate(()=>game.player.x))>right+8,hero+" lost direction on turn or resize");
                 await touch.cancel();await page.waitForTimeout(100);
                 const stopped=await page.evaluate(()=>({x:game.player.x,y:game.player.y,d:game.player.walkDistance,moving:game.player.moving}));await page.waitForTimeout(120);
                 assert.deepEqual(await page.evaluate(()=>({x:game.player.x,y:game.player.y,d:game.player.walkDistance,moving:game.player.moving})),stopped,"Cancelled touch did not stop");
