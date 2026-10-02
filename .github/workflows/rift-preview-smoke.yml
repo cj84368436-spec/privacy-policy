@@ -32,6 +32,17 @@ jobs:
           const mediaResponse=await fetch(mp4URL);const mediaBytes=Buffer.from(await mediaResponse.arrayBuffer());const localBytes=fs.readFileSync("play/rift-keepers/video/knight-15s.mp4");
           console.log("Hosted MP4",JSON.stringify({status:mediaResponse.status,type:mediaResponse.headers.get("content-type"),length:mediaBytes.length,localLength:localBytes.length,identical:mediaBytes.equals(localBytes),magic:mediaBytes.subarray(0,12).toString("hex")}));
           assert.equal(mediaResponse.status,200);assert.ok(mediaBytes.equals(localBytes),"Hosted MP4 differs from release");
+          async function makeTouchDriver(page,browserName){
+           const cdp=browserName==="chromium"?await page.context().newCDPSession(page):null,points=new Map();
+           async function send(type,id,x,y){
+            const old=points.get(id),changed={id,x:x??old?.x,y:y??old?.y},ended=type==="touchend"||type==="touchcancel";
+            if(ended)points.delete(id);else points.set(id,changed);
+            if(cdp)await cdp.send("Input.dispatchTouchEvent",{type:{touchstart:"touchStart",touchmove:"touchMove",touchend:"touchEnd",touchcancel:"touchCancel"}[type],touchPoints:ended?[]:[...points.values()].map(p=>({...p,radiusX:8,radiusY:8}))});
+            else await page.evaluate(({type,changed,points})=>{const world=document.getElementById("world"),make=p=>new Touch({identifier:p.id,target:world,clientX:p.x,clientY:p.y,pageX:p.x,pageY:p.y,screenX:p.x,screenY:p.y}),touches=points.map(make);world.dispatchEvent(new TouchEvent(type,{bubbles:true,cancelable:true,changedTouches:[make(changed)],touches,targetTouches:touches}));},{type,changed,points:[...points.values()]});
+           }
+           return {start:(x,y,id=7)=>send("touchstart",id,x,y),move:(x,y,id=7)=>send("touchmove",id,x,y),end:(id=7)=>send("touchend",id),cancel:(id=7)=>send("touchcancel",id)};
+          }
+          
           const failures=[];
           for (const [name,engine] of [["chromium",chromium],["webkit",webkit]]) {
             const browser=await engine.launch(name==="chromium"?{channel:"chrome"}:{});
@@ -40,7 +51,7 @@ jobs:
               const errors=[];page.on("pageerror",e=>errors.push(e.message));
               page.on("requestfailed",r=>{if(r.url().includes("mp4"))console.log(name+" video request failed",r.url(),r.failure());});
               page.on("response",r=>{if(r.url().includes("mp4"))console.log(name+" video response",r.status(),r.url(),JSON.stringify(r.headers()));});
-              let current=false;for(let attempt=0;attempt<40;attempt++){await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?v="+process.env.GITHUB_SHA,{waitUntil:"networkidle"});current=await page.evaluate(()=>typeof Art!=="undefined"&&Art.version==="1.5.1");if(current)break;await page.waitForTimeout(3000);}assert.ok(current,"New preview did not finish publishing: "+JSON.stringify({errors,state:await page.evaluate(()=>({version:typeof Art!=="undefined"?Art.version:null,title:document.title,url:location.href,text:document.body.innerText.slice(0,300)}))}));
+              let current=false;for(let attempt=0;attempt<40;attempt++){await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?v="+process.env.GITHUB_SHA,{waitUntil:"networkidle"});current=await page.evaluate(()=>typeof Art!=="undefined"&&Art.version==="1.5.2");if(current)break;await page.waitForTimeout(3000);}assert.ok(current,"New preview did not finish publishing: "+JSON.stringify({errors,state:await page.evaluate(()=>({version:typeof Art!=="undefined"?Art.version:null,title:document.title,url:location.href,text:document.body.innerText.slice(0,300)}))}));
               await page.locator("#home:not(.hidden)").waitFor({timeout:20000});
               assert.equal(await page.evaluate(()=>Art.ready&&Art.images.size===53),true,"Painted textures did not load");
               assert.equal(await page.evaluate(()=>audio.buffers.size),19,"Recorded audio did not decode");
@@ -79,6 +90,27 @@ jobs:
               const records=await page.evaluate(()=>localStorage.getItem("riftkeepers:play-preview:v1"));
               for(const [key,hero,title]of [["blade","knight","검술 연습"],["arrow","ranger","궁술 연습"],["bolt","mage","마법 연습"]]){
                 await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?v="+process.env.GITHUB_SHA+"&practice="+key,{waitUntil:"networkidle"});await page.locator("#home:not(.hidden)").waitFor();assert.equal(await page.locator('[data-hero="'+hero+'"]').getAttribute("aria-pressed"),"true");await page.locator("#start").click();await page.waitForFunction(()=>game?.practice===true);assert.equal(await page.evaluate(()=>game.hero.id),hero);
+                await page.evaluate(()=>{game.player.inv=999;game.enemies=[];game.spawnCd=game.nextElite=999;});
+                await page.keyboard.down("ArrowLeft");
+                const touch=await makeTouchDriver(page,name);
+                for(const [dx,dy]of [[1,0],[-1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]]){
+                  const before=await page.evaluate(()=>({x:game.player.x,y:game.player.y,d:game.player.walkDistance}));
+                  await touch.start(195,440);await touch.move(195+dx*60,440+dy*60);await page.waitForTimeout(150);
+                  const after=await page.evaluate(()=>({x:game.player.x,y:game.player.y,d:game.player.walkDistance}));
+                  if(dx)assert.ok((after.x-before.x)*dx>8,hero+" failed touch x direction "+dx);
+                  if(dy)assert.ok((after.y-before.y)*dy>8,hero+" failed touch y direction "+dy);
+                  assert.ok(after.d>before.d,"Walking distance did not advance");
+                  await touch.end();
+                }
+                await touch.start(195,440);await touch.move(130,440);await page.waitForTimeout(100);
+                const left=await page.evaluate(()=>game.player.x);
+                await touch.move(290,440);await page.evaluate(()=>window.dispatchEvent(new Event("resize")));await page.waitForTimeout(150);
+                assert.ok((await page.evaluate(()=>game.player.x))>left+8,hero+" lost direction on turn or resize");
+                await touch.cancel();await page.waitForTimeout(100);
+                const stopped=await page.evaluate(()=>({x:game.player.x,y:game.player.y,d:game.player.walkDistance,moving:game.player.moving}));await page.waitForTimeout(120);
+                assert.deepEqual(await page.evaluate(()=>({x:game.player.x,y:game.player.y,d:game.player.walkDistance,moving:game.player.moving})),stopped,"Cancelled touch did not stop");
+                assert.equal(stopped.moving,false);
+                console.log(name+" "+hero+": eight directions, reversal, resize, cancellation and walking distance passed ("+(name==="chromium"?"browser touch input":"DOM TouchEvent")+")");
                 await page.evaluate(()=>{for(let i=0;i<1100&&!game.result;i++)game.step(1/60);});await page.locator("#dialog-title").filter({hasText:title+" 완료"}).waitFor();
                 assert.equal(await page.evaluate(()=>localStorage.getItem("riftkeepers:play-preview:v1")),records,"Practice altered permanent records");assert.deepEqual(errors,[],"Uncaught practice errors");
               }
@@ -87,7 +119,7 @@ jobs:
               await page.evaluate(()=>{window.videoEvents=[];const v=document.getElementById("reel");for(const type of ["loadstart","loadedmetadata","error","stalled","suspend","playing"])v.addEventListener(type,()=>window.videoEvents.push(type));const play=v.play.bind(v);v.play=()=>play().catch(e=>{window.videoPlayError={name:e.name,message:e.message};throw e;});});await page.locator("#play").click();
               await page.waitForFunction(()=>{const v=document.getElementById("reel");if(v.error)throw new Error("Video error "+v.error.code);return v.readyState>=1;},{},{timeout:25000});
               assert.ok((await page.evaluate(()=>document.getElementById("reel").duration))>14.8,"Gameplay reel has no duration");await page.waitForFunction(()=>document.getElementById("reel").currentTime>.1,{},{timeout:10000});
-              console.log(name+": hosted 1.5.1 loads frames and audio, normal controls work, all three practices keep records unchanged, and H264/AAC gameplay video plays");
+              console.log(name+": hosted 1.5.2 loads frames and audio, normal controls work, all three practices keep records unchanged, and H264/AAC gameplay video plays");
             } catch(error) {
               const pages=browser.contexts().flatMap(c=>c.pages());const page=pages[pages.length-1];if(page){console.log(name+" video failure",await page.evaluate(()=>{const v=document.getElementById("reel");return v?{src:v.currentSrc,source:v.querySelector("source")?.src,ready:v.readyState,network:v.networkState,error:v.error?.code,playError:window.videoPlayError,events:window.videoEvents}:{};}));await page.screenshot({path:"preview-evidence/"+name+"-failure.png"});}
               console.log(name+" failed",error.message);failures.push(name+": "+error.message);
