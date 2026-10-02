@@ -38,7 +38,7 @@ jobs:
             const old=points.get(id),changed={id,x:x??old?.x,y:y??old?.y},ended=type==="touchend"||type==="touchcancel";
             if(ended)points.delete(id);else points.set(id,changed);
             if(cdp)await cdp.send("Input.dispatchTouchEvent",{type:{touchstart:"touchStart",touchmove:"touchMove",touchend:"touchEnd",touchcancel:"touchCancel"}[type],touchPoints:ended?[]:[...points.values()].map(p=>({...p,radiusX:8,radiusY:8}))});
-            else await page.evaluate(({type,changed,points})=>{const world=document.getElementById("world"),make=p=>new Touch({identifier:p.id,target:world,clientX:p.x,clientY:p.y,pageX:p.x,pageY:p.y,screenX:p.x,screenY:p.y}),touches=points.map(make);world.dispatchEvent(new TouchEvent(type,{bubbles:true,cancelable:true,changedTouches:[make(changed)],touches,targetTouches:touches}));},{type,changed,points:[...points.values()]});
+            else await page.evaluate(({type,changed,points})=>{const world=document.getElementById("world"),make=p=>({identifier:p.id,target:world,clientX:p.x,clientY:p.y,pageX:p.x,pageY:p.y,screenX:p.x,screenY:p.y}),touches=points.map(make),event=new Event(type,{bubbles:true,cancelable:true});Object.defineProperties(event,{changedTouches:{value:[make(changed)]},touches:{value:touches},targetTouches:{value:touches}});world.dispatchEvent(event);},{type,changed,points:[...points.values()]});
            }
            return {start:(x,y,id=7)=>send("touchstart",id,x,y),move:(x,y,id=7)=>send("touchmove",id,x,y),end:(id=7)=>send("touchend",id),cancel:(id=7)=>send("touchcancel",id)};
           }
@@ -51,7 +51,7 @@ jobs:
               const errors=[];page.on("pageerror",e=>errors.push(e.message));
               page.on("requestfailed",r=>{if(r.url().includes("mp4"))console.log(name+" video request failed",r.url(),r.failure());});
               page.on("response",r=>{if(r.url().includes("mp4"))console.log(name+" video response",r.status(),r.url(),JSON.stringify(r.headers()));});
-              let current=false;for(let attempt=0;attempt<40;attempt++){await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?v="+process.env.GITHUB_SHA,{waitUntil:"networkidle"});current=await page.evaluate(()=>typeof Art!=="undefined"&&Art.version==="1.5.2");if(current)break;await page.waitForTimeout(3000);}assert.ok(current,"New preview did not finish publishing: "+JSON.stringify({errors,state:await page.evaluate(()=>({version:typeof Art!=="undefined"?Art.version:null,title:document.title,url:location.href,text:document.body.innerText.slice(0,300)}))}));
+              let current=false;for(let attempt=0;attempt<40;attempt++){await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?v="+process.env.GITHUB_SHA,{waitUntil:"networkidle"});current=await page.evaluate(()=>typeof Art!=="undefined"&&Art.version==="1.5.2"&&document.body.dataset.build==="1.5.2-touch2");if(current)break;await page.waitForTimeout(3000);}assert.ok(current,"New preview did not finish publishing: "+JSON.stringify({errors,state:await page.evaluate(()=>({version:typeof Art!=="undefined"?Art.version:null,title:document.title,url:location.href,text:document.body.innerText.slice(0,300)}))}));
               await page.locator("#home:not(.hidden)").waitFor({timeout:20000});
               assert.equal(await page.evaluate(()=>Art.ready&&Art.images.size===53),true,"Painted textures did not load");
               assert.equal(await page.evaluate(()=>audio.buffers.size),19,"Recorded audio did not decode");
@@ -97,20 +97,20 @@ jobs:
                   const before=await page.evaluate(()=>({x:game.player.x,y:game.player.y,d:game.player.walkDistance}));
                   await touch.start(195,440);await touch.move(195+dx*60,440+dy*60);await page.waitForTimeout(150);
                   const after=await page.evaluate(()=>({x:game.player.x,y:game.player.y,d:game.player.walkDistance}));
-                  if(dx)assert.ok((after.x-before.x)*dx>8,hero+" failed touch x direction "+dx);
+                  if(dx)assert.ok((after.x-before.x)*dx>8,hero+" failed touch x direction "+dx+" "+JSON.stringify({before,after,input:await page.evaluate(()=>({source:joy.source,x:joy.x,y:joy.y,keys:[...keys],touchEvents:"TouchEvent" in window}))}));
                   if(dy)assert.ok((after.y-before.y)*dy>8,hero+" failed touch y direction "+dy);
                   assert.ok(after.d>before.d,"Walking distance did not advance");
                   await touch.end();
                 }
                 await touch.start(195,440);await touch.move(130,440);await page.waitForTimeout(100);
                 const left=await page.evaluate(()=>game.player.x);
-                await touch.move(290,440);await page.evaluate(()=>window.dispatchEvent(new Event("resize")));await page.waitForTimeout(150);
+                await touch.move(290,440);await page.keyboard.down("ArrowLeft");await page.evaluate(()=>window.dispatchEvent(new Event("resize")));await page.waitForTimeout(150);
                 assert.ok((await page.evaluate(()=>game.player.x))>left+8,hero+" lost direction on turn or resize");
                 await touch.cancel();await page.waitForTimeout(100);
                 const stopped=await page.evaluate(()=>({x:game.player.x,y:game.player.y,d:game.player.walkDistance,moving:game.player.moving}));await page.waitForTimeout(120);
                 assert.deepEqual(await page.evaluate(()=>({x:game.player.x,y:game.player.y,d:game.player.walkDistance,moving:game.player.moving})),stopped,"Cancelled touch did not stop");
                 assert.equal(stopped.moving,false);
-                console.log(name+" "+hero+": eight directions, reversal, resize, cancellation and walking distance passed ("+(name==="chromium"?"browser touch input":"DOM TouchEvent")+")");
+                console.log(name+" "+hero+": eight directions, reversal, resize, cancellation and walking distance passed ("+(name==="chromium"?"browser touch input":"simulated touch events")+")");
                 await page.evaluate(()=>{for(let i=0;i<1100&&!game.result;i++)game.step(1/60);});await page.locator("#dialog-title").filter({hasText:title+" 완료"}).waitFor();
                 assert.equal(await page.evaluate(()=>localStorage.getItem("riftkeepers:play-preview:v1")),records,"Practice altered permanent records");assert.deepEqual(errors,[],"Uncaught practice errors");
               }
