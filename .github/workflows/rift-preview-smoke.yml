@@ -46,6 +46,12 @@ jobs:
           
           const soundManifest=JSON.parse(fs.readFileSync("play/rift-keepers/audio/manifest.json","utf8"));assert.equal(soundManifest.version,"3.1.0");
           for(const name of ["blade-hit-a.mp3","swish-a.mp3","thunder.mp3","arrow-flight.mp3"]){const b=fs.readFileSync("play/rift-keepers/audio/"+name),entry=soundManifest.files.find(x=>x.name===name);assert.equal(crypto.createHash("sha256").update(b).digest("hex"),entry.sha256);}
+
+          const deadline=Date.now()+8*60*1000;
+          let deployed=false;
+          while(Date.now()<deadline){try{const response=await fetch("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?release="+process.env.GITHUB_SHA+"&fresh="+Date.now(),{headers:{"Cache-Control":"no-cache"},signal:AbortSignal.timeout(10000)});const html=await response.text();deployed=response.ok&&html.includes('data-build="3.1.1-production"')&&html.includes('data-preview-revision="audit-r1"');if(deployed)break;}catch{}await new Promise(resolve=>setTimeout(resolve,2500));}
+          assert.ok(deployed,"GitHub Pages did not publish the expected 3.1.1 runtime within eight minutes");
+
           const failures=[];
           for (const [name,engine] of [["chromium",chromium],["webkit",webkit]]) {
             const browser=await engine.launch(name==="chromium"?{channel:"chrome"}:{});
@@ -54,7 +60,7 @@ jobs:
               const errors=[];page.on("pageerror",e=>errors.push(e.message));
               page.on("requestfailed",r=>{if(r.url().includes("mp4"))console.log(name+" video request failed",r.url(),r.failure());});
               page.on("response",r=>{if(r.url().includes("mp4"))console.log(name+" video response",r.status(),r.url(),JSON.stringify(r.headers()));});
-              let current=false;for(let attempt=0;attempt<40;attempt++){await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?v="+process.env.GITHUB_SHA+"&fresh="+attempt+"-"+Date.now(),{waitUntil:"networkidle"});current=await page.evaluate(()=>typeof Art!=="undefined"&&Art.version==="3.0.0"&&document.body.dataset.build==="3.1.0-production"&&document.body.dataset.previewRevision==="flight-discovery-r1");if(current)break;await page.waitForTimeout(3000);}assert.ok(current,"New preview did not finish publishing: "+JSON.stringify({errors,state:await page.evaluate(()=>({version:typeof Art!=="undefined"?Art.version:null,title:document.title,url:location.href,text:document.body.innerText.slice(0,300)}))}));
+              let current=false;for(let attempt=0;attempt<40;attempt++){await page.goto("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?v="+process.env.GITHUB_SHA+"&fresh="+attempt+"-"+Date.now(),{waitUntil:"networkidle"});current=await page.evaluate(()=>typeof Art!=="undefined"&&Art.version==="3.0.0"&&document.body.dataset.build==="3.1.1-production"&&document.body.dataset.previewRevision==="audit-r1");if(current)break;await page.waitForTimeout(3000);}assert.ok(current,"New preview did not finish publishing: "+JSON.stringify({errors,state:await page.evaluate(()=>({version:typeof Art!=="undefined"?Art.version:null,title:document.title,url:location.href,text:document.body.innerText.slice(0,300)}))}));
               await page.locator("#home:not(.hidden)").waitFor({timeout:20000});await page.setExtraHTTPHeaders({"Cache-Control":"no-cache"});
               assert.equal(await page.evaluate(()=>Art.ready&&Art.images.size===56),true,"Painted textures did not load");
               assert.equal(await page.evaluate(()=>Art.frames.size),36,"Softened combat frames did not cache");
@@ -84,6 +90,14 @@ jobs:
               await page.waitForFunction(()=>document.querySelectorAll("#skills .skill").length===6);assert.equal(await page.evaluate(()=>Object.keys(game.weapons).length),6);
               await page.screenshot({path:"preview-evidence/"+name+"-six-attacks.png"});
               await page.locator("#pause").tap();assert.ok((await page.locator("#retire").innerText()).includes("도전 종료"));await page.locator("#retire").click();await page.locator("#result-home").click();
+
+
+              // The standalone preview must settle an empty run once and return to a usable home.
+              const balance=await page.evaluate(()=>save.coins);
+              await page.locator("#start").tap();await page.locator("#pause").tap();
+              assert.equal(await page.locator("#retire").innerText(),"도전 종료 · 보석 +0 정산");
+              await page.locator("#pause-exit").click();await page.locator("#exit-confirm").click();
+              await page.locator("#home:not(.hidden)").waitFor();assert.equal(await page.evaluate(()=>save.coins),balance,"Empty runs grant no gems");assert.equal(await page.locator("#overlay").isVisible(),false);
 
               // Exercise the new objective through the actual hosted implementation.
               await page.locator("#start").tap();
@@ -163,7 +177,7 @@ jobs:
               await page.evaluate(()=>{window.videoEvents=[];const v=document.getElementById("reel");for(const type of ["loadstart","loadedmetadata","error","stalled","suspend","playing"])v.addEventListener(type,()=>window.videoEvents.push(type));const play=v.play.bind(v);v.play=()=>play().catch(e=>{window.videoPlayError={name:e.name,message:e.message};throw e;});});await page.locator("#play").click();
               await page.waitForFunction(()=>{const v=document.getElementById("reel");if(v.error)throw new Error("Video error "+v.error.code);return v.readyState>=1;},{},{timeout:25000});
               assert.ok((await page.evaluate(()=>document.getElementById("reel").duration))>14.8,"Gameplay reel has no duration");await page.waitForFunction(()=>document.getElementById("reel").currentTime>.1,{},{timeout:10000});
-              console.log(name+": hosted 3.1 arrow flight, fair discovery, painted skill images, animated ultimates and controls work, mobile steering and all four practices keep records unchanged, and H264/AAC gameplay video plays");
+              console.log(name+": hosted 3.1.1 audited rewards, exit and arrow flight, fair discovery, painted skill images, animated ultimates and controls work, mobile steering and all four practices keep records unchanged, and H264/AAC gameplay video plays");
             } catch(error) {
               const pages=browser.contexts().flatMap(c=>c.pages());const page=pages[pages.length-1];if(page){console.log(name+" video failure",await page.evaluate(()=>{const v=document.getElementById("reel");return v?{src:v.currentSrc,source:v.querySelector("source")?.src,ready:v.readyState,network:v.networkState,error:v.error?.code,playError:window.videoPlayError,events:window.videoEvents}:{};}));await page.screenshot({path:"preview-evidence/"+name+"-failure.png"});}
               console.log(name+" failed",error.message);failures.push(name+": "+error.message);
