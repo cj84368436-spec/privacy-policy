@@ -47,9 +47,10 @@ jobs:
           const soundManifest=JSON.parse(fs.readFileSync("play/rift-keepers/audio/manifest.json","utf8"));assert.equal(soundManifest.version,"3.1.0");
           for(const name of ["blade-hit-a.mp3","swish-a.mp3","thunder.mp3","arrow-flight.mp3"]){const b=fs.readFileSync("play/rift-keepers/audio/"+name),entry=soundManifest.files.find(x=>x.name===name);assert.equal(crypto.createHash("sha256").update(b).digest("hex"),entry.sha256);}
 
+          const expectedHTML=fs.readFileSync("play/rift-keepers/index.html","utf8");
           const deadline=Date.now()+8*60*1000;
           let deployed=false;
-          while(Date.now()<deadline){try{const response=await fetch("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?release="+process.env.GITHUB_SHA+"&fresh="+Date.now(),{headers:{"Cache-Control":"no-cache"},signal:AbortSignal.timeout(10000)});const html=await response.text();deployed=response.ok&&html.includes('data-build="3.1.1-production"')&&html.includes('data-preview-revision="audit-r1"');if(deployed)break;}catch{}await new Promise(resolve=>setTimeout(resolve,2500));}
+          while(Date.now()<deadline){try{const response=await fetch("https://cj84368436-spec.github.io/privacy-policy/play/rift-keepers/?release="+process.env.GITHUB_SHA+"&fresh="+Date.now(),{headers:{"Cache-Control":"no-cache"},signal:AbortSignal.timeout(10000)});const html=await response.text();deployed=response.ok&&html===expectedHTML;if(deployed)break;}catch{}await new Promise(resolve=>setTimeout(resolve,2500));}
           assert.ok(deployed,"GitHub Pages did not publish the expected 3.1.1 runtime within eight minutes");
 
           const failures=[];
@@ -92,6 +93,7 @@ jobs:
               await page.locator("#pause").tap();assert.ok((await page.locator("#retire").innerText()).includes("도전 종료"));await page.locator("#retire").click();await page.locator("#result-home").click();
 
 
+              assert.equal(await page.evaluate(()=>{const g=new Game("knight",{},17);g.weapons={};g.spawnCd=g.nextElite=999;g.player.inv=999;const e=g.spawn("seer");Object.assign(e,{x:1100,y:900,shoot:0,stagger:1,speed:0});g.step(1/60);return g.shots.length;}),0,"Stunned enemies must not shoot");
               // The standalone preview must settle an empty run once and return to a usable home.
               const balance=await page.evaluate(()=>save.coins);
               await page.locator("#start").tap();await page.locator("#pause").tap();
