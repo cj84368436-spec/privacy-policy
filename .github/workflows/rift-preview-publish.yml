@@ -1,0 +1,42 @@
+name: Prepare verified Rift 5.2 playable files
+on:
+  push:
+    paths:
+      - '.github/workflows/rift-preview-publish.yml'
+      - '.evidence/rift-preview-release.json'
+      - '.evidence/rift-preview-publish.mjs'
+      - '.evidence/rift-skill-preview.html'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - id: source
+        run: |
+          node --input-type=module <<'JS'
+          import fs from "node:fs";const c=JSON.parse(fs.readFileSync(".evidence/rift-preview-release.json","utf8"));if(!/^[a-f0-9]{40}$/.test(c.runtimeRef))throw Error("Invalid ref");fs.appendFileSync(process.env.GITHUB_OUTPUT,"ref="+c.runtimeRef+"\n");
+          JS
+      - uses: actions/checkout@v4
+        with:
+          repository: cj84368436-spec/ALLINONE
+          ref: ${{ steps.source.outputs.ref }}
+          path: _rift-source
+          persist-credentials: false
+      - name: Prepare verified game assets and real skill recordings
+        run: node .evidence/rift-preview-publish.mjs
+      - name: Save playable files for publication
+        run: |
+          git config user.name "Rift preview publisher"
+          git config user.email "actions@users.noreply.github.com"
+          git add play/rift-keepers
+          git diff --cached --quiet && exit 0
+          git commit -m "Store verified painted Rift 5.2 playable files [skip ci]"
+          git pull --rebase --autostash
+          git push

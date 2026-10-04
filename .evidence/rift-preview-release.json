@@ -1,0 +1,8 @@
+{
+  "version": "5.2.0",
+  "runtimeRef": "c412ff0efaca669d98d3ed325c8a54cb7e1671db",
+  "videoRef": "48fe719c988f1ffed62aeaa64aaf5ce98af4a4a7",
+  "reviewRun": 37198657007,
+  "preparedAt": "2026-10-04",
+  "target": "Playable review of the native game runtime; Toss console release remains separate"
+}
